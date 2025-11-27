@@ -24,7 +24,7 @@ newest newest newest newest newest newest
 vocab: Dict[str, int] = {}
 
 
-def bpe_train(corpus: str, vocab: Dict[str, int],vocab_size=500, initial_vocab_size=256) -> List[Tuple[bytes, bytes]]:
+def bpe_tokenizer_train(corpus: str, vocab: Dict[str, int],vocab_size=500, initial_vocab_size=256) -> List[Tuple[bytes, bytes]]:
     """Train BPE tokenizer on a corpus.
     
     Args:
@@ -109,8 +109,25 @@ def bpe_train(corpus: str, vocab: Dict[str, int],vocab_size=500, initial_vocab_s
     return merges
 
 
-bpe_train(corpus, vocab)
+merges=bpe_tokenizer_train(corpus, vocab)
+print(f"merges is {merges}")
 
+def bpe_tokenize(word: str, merges: List[Tuple[bytes, bytes]]):
+    tokens = list(word_to_byte_tuple(word))  # start from raw bytes
 
+    for merge_pair in merges:
+        i = 0
+        merged = []
+        while i < len(tokens):
+            if i+1 < len(tokens) and (tokens[i], tokens[i+1]) == merge_pair:
+                merged.append(tokens[i] + tokens[i+1]) # combined token
+                i += 2
+            else:
+                merged.append(tokens[i])
+                i += 1
+        tokens = merged
+    
+    return tokens
 
-
+tokens = bpe_tokenize("newest", merges)
+print(tokens)
