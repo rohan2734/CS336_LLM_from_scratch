@@ -131,3 +131,115 @@ def bpe_tokenize(word: str, merges: List[Tuple[bytes, bytes]]):
 
 tokens = bpe_tokenize("newest", merges)
 print(tokens)
+
+def train_bpe(input_path:str, vocab_size:int , special_tokens: List[str] = None) -> Tuple[Dict[int, bytes], List[Tuple[bytes, bytes]]]:
+
+    """Train BPE tokenizer on a corpus
+
+    Args:
+        input_path: Input text corpus from input path
+        vocab_size: maximum vocabulary size
+        special_tokens: List of special tokens to ignore
+
+    Returns:
+        vocab : vocabulary dictionary with tokenId, bytes
+        merges: List of merges, where each merge is a tuple of (bytes, bytes)
+    """
+
+    """ GPT-2’s training code (OpenAI version) does this:
+        - Read file in raw bytes
+        - Decode using UTF-8 but ignore errors
+        - Split into words
+        - Convert each word back into bytes
+        - Run byte-pair merges
+        - This ensures:
+        - perfect byte reproduction
+        - correct Unicode handling
+        - correct word segmentation
+        - merges operate on raw byte sequences
+    """
+    # Pretokenization: split on whitespace
+
+    if special_tokens is None:
+        special_tokens = []
+
+        # ---------------------------
+        # 1. Initialize vocabulary
+        # ---------------------------
+    vocab: Dict[int, bytes] = {}
+    next_id = 0
+
+    # Add raw byte tokens (0–255)
+    for b in range(256):
+        vocab[next_id] = bytes([b])
+        next_id += 1
+
+    # Add special tokens
+    for tok in special_tokens:
+        vocab[next_id] = tok.encode("utf-8")
+        next_id += 1
+
+    initial_vocab_size = next_id
+    num_merges_allowed = vocab_size - initial_vocab_size
+
+    # 2. Read data
+    with open(input_path, "rb") as f:
+        data = f.read()
+
+    text = data.decode("utf-8", errors="ignore")
+
+    # 3. Word frequencies
+    word_frequencies: Dict[str, int] = {}
+    for word in text.split():
+        word_frequencies[word] = word_frequencies.get(word, 0) + 1
+
+    # Convert words to byte tuples
+    byte_word_frequencies: Dict[Tuple[bytes, ...], int] = {
+        tuple(bytes([b]) for b in word.encode("utf-8")): count
+        for word, count in word_frequencies.items()
+    }
+
+    # 4. BPE merge loop
+    merges: List[Tuple[bytes, bytes]] = []
+
+    while len(merges) < num_merges_allowed:
+        # Count all byte pairs
+        pair_counts = {}
+        for byte_tuple, freq in byte_word_frequencies.items():
+            for a, b in zip(byte_tuple, byte_tuple[1:]):
+                pair = (a, b)
+                pair_counts[pair] = pair_counts.get(pair, 0) + freq
+
+        if not pair_counts:
+            break
+
+        # Best pair = highest freq, tie-break lexicographically
+        best_pair, _ = max(pair_counts.items(), key=lambda x: (x[1], x[0]))
+
+        # New merged token
+        merged_token = best_pair[0] + best_pair[1]
+
+        # Add to vocab
+        vocab[next_id] = merged_token
+        next_id += 1
+
+        # Replace occurrences of best_pair
+        new_byte_word_frequencies = {}
+        for byte_tuple, freq in byte_word_frequencies.items():
+            new_list = []
+            i = 0
+            while i < len(byte_tuple):
+                if i + 1 < len(byte_tuple) and (byte_tuple[i], byte_tuple[i + 1]) == best_pair:
+                    new_list.append(merged_token)
+                    i += 2
+                else:
+                    new_list.append(byte_tuple[i])
+                    i += 1
+
+            new_byte_word_frequencies[tuple(new_list)] = freq
+
+        byte_word_frequencies = new_byte_word_frequencies
+
+        merges.append(best_pair)
+
+    return vocab, merges
