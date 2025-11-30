@@ -112,4 +112,8 @@ if __name__ == "__main__":
     counts,elapsed = pretokenizer.run()
 
     print("Total time:",elapsed)
+    first_10 = list(counts.items())[:10]
+    print("First 10 pre-tokens:")
+    for k, v in first_10:
+        print(k, v)
     print("Unique pre-tokens:",len(counts))
