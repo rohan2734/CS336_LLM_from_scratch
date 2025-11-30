@@ -35,7 +35,8 @@ def bpe_tokenizer_train(corpus: str, vocab: Dict[str, int],vocab_size=500, initi
         List of merges, where each merge is a tuple of (bytes, bytes)
     """
     # Pretokenization: split on whitespace
-   
+
+    print("bpe_tokenizer_train called")
     word_frequencies: Dict[str, int] = {}
     
     for word in corpus.split():
@@ -109,8 +110,8 @@ def bpe_tokenizer_train(corpus: str, vocab: Dict[str, int],vocab_size=500, initi
     return merges
 
 
-merges=bpe_tokenizer_train(corpus, vocab)
-print(f"merges is {merges}")
+# merges=bpe_tokenizer_train(corpus, vocab)
+# print(f"merges is {merges}")
 
 def bpe_tokenize(word: str, merges: List[Tuple[bytes, bytes]]):
     tokens = list(word_to_byte_tuple(word))  # start from raw bytes
@@ -129,8 +130,8 @@ def bpe_tokenize(word: str, merges: List[Tuple[bytes, bytes]]):
     
     return tokens
 
-tokens = bpe_tokenize("newest", merges)
-print(tokens)
+# tokens = bpe_tokenize("newest", merges)
+# print(tokens)
 
 def train_bpe(input_path:str, vocab_size:int , special_tokens: List[str] = None) -> Tuple[Dict[int, bytes], List[Tuple[bytes, bytes]]]:
 
@@ -159,6 +160,7 @@ def train_bpe(input_path:str, vocab_size:int , special_tokens: List[str] = None)
         - merges operate on raw byte sequences
     """
     # Pretokenization: split on whitespace
+    print("train_bpe called")
 
     if special_tokens is None:
         special_tokens = []
@@ -243,3 +245,5 @@ def train_bpe(input_path:str, vocab_size:int , special_tokens: List[str] = None)
         merges.append(best_pair)
 
     return vocab, merges
+
+

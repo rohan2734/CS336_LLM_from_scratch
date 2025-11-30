@@ -3,6 +3,9 @@ import time
 from typing import Tuple, Dict, BinaryIO,List
 from multiprocessing import Pool
 from collections import defaultdict
+import regex as re
+
+from cs336_basics.bpe_tokenizer_training_2 import word_to_byte_tuple
 
 
 class PretokenizerMP:
@@ -11,21 +14,26 @@ class PretokenizerMP:
         self.num_processes = num_processes
         self.split_special_token = split_special_token
         self.global_counts = defaultdict(int)
+        self.special_pattern = re.compile(
+            "|".join(re.escape(tok.decode()) for tok in [split_special_token])
+        )
+
+        self.pat =  re.compile(r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
     @staticmethod
     def word_to_byte_tuple(word: str) -> Tuple[bytes, ...]:
         return tuple(bytes([b]) for b in word.encode("utf-8"))
 
-    @staticmethod
-    def pretokenization(text_chunk: str) -> Dict[Tuple[bytes, ...], int]:
-        word_frequencies = {}
-        for w in text_chunk.split():
-            word_frequencies[w] = word_frequencies.get(w, 0) + 1
 
-        return {
-            PretokenizerMP.word_to_byte_tuple(word): count
-            for word, count in word_frequencies.items()
-        }
+    def pretokenization(self,text_chunk: str) -> Dict[Tuple[bytes, ...], int]:
+        word_frequencies = defaultdict(int)
+
+        for match in self.pat.finditer(text_chunk):
+            tok = match.group(0)
+            byte = word_to_byte_tuple(tok)
+            word_frequencies[byte]+=1
+
+        return word_frequencies
 
     @staticmethod
     def find_chunk_boundaries(file: BinaryIO, desired_num_chunks: int, split_special_token: bytes):
@@ -56,11 +64,27 @@ class PretokenizerMP:
         return sorted(set(chunk_boundaries))
 
     @staticmethod
-    def worker(path: str, start: int, end: int):
-        with open(path, "rb") as f:
+    def worker(self, start: int, end: int):
+        with open(self.path, "rb") as f:
             f.seek(start)
             chunk = f.read(end - start).decode("utf-8", errors="ignore")
-            return PretokenizerMP.pretokenization(chunk)
+
+        # Split chunk into segments by special token
+        segments = self.special_pattern.split(chunk)
+
+        local_counts = defaultdict(int)
+
+        # Pretokenize each segment separately
+        for seg in segments:
+            seg = seg.strip()
+            if not seg:
+                continue
+
+            counts = self.pretokenization(seg)
+            for k, v in counts.items():
+                local_counts[k] += v
+
+        return local_counts
 
     def _merge(self, local_counts):
         for token, count in local_counts.items():
@@ -70,7 +94,7 @@ class PretokenizerMP:
         with open(self.path, "rb") as f:
             boundaries = self.find_chunk_boundaries(f, self.num_processes, self.split_special_token)
 
-        tasks = [(self.path, s, e) for s, e in zip(boundaries[:-1], boundaries[1:])]
+        tasks = [(self, s, e) for s, e in zip(boundaries[:-1], boundaries[1:])]
 
         t0 = time.perf_counter()
         with Pool(self.num_processes) as pool:
